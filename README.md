@@ -1,4 +1,3 @@
-# PROJECT-WORK-NIFTY-50-1-min-data
-To develop a predictive analytics framework that estimates return distributions and target-return probabilities over multiple investment horizons by transforming minute-level NIFTY 50 data into investment-relevant time series.
-This is link (from Kaggle) to the NIFTY 50, per minute dataset from 2015 to 2025, to be used for the project.
-https://www.kaggle.com/datasets/debashis74017/nifty-50-minute-data
+# AIRBNB-PRICE-PREDICTION
+In recent years, platforms like Airbnb have transformed the hospitality industry by enabling individuals to rent out properties. Pricing of listings depends on multiple factors such as location, amenities, and host characteristics. Accurate price prediction is essential for both hosts and customers. 
+This project aims to develop predictive models to estimate Airbnb listing prices using statistical and machine learning techniques. 
