@@ -1,0 +1,197 @@
+---
+title: "Airbnb Data Analysis"
+author: "Jayani Das"
+date: "2026-04-07"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+#install.packages(c("tidyverse", "caret", "glmnet", "MASS", "car", "class"))
+#install.packages("LaTeX")
+```
+```{r}
+
+library(tidyverse)
+library(caret)
+library(glmnet)
+library(MASS)
+library(car)
+```
+
+```{r}
+df <- read.csv("final_data_with_changes.csv")
+
+head(df)
+str(df)
+summary(df)
+names(df)
+```
+
+```{r}
+colSums(is.na(df))
+
+df <- na.omit(df)
+```
+
+```{r}
+df$log_price <- log(df$price)
+```
+
+The response variable (price) exhibited strong right-skewness. A logarithmic transformation was applied to normalize the distribution, stabilize variance, and improve the performance and interpretability of regression models.
+
+```{r}
+#converting categorical variables
+df <- df %>%
+  mutate_if(is.character, as.factor)
+```
+
+All character variables were converted into factors to ensure proper handling of categorical predictors. This enables the regression model to internally generate dummy variables and incorporate qualitative features effectively.
+
+```{r}
+set.seed(123)
+
+trainIndex <- createDataPartition(df$log_price, p = 0.7, list = FALSE)
+
+train <- df[trainIndex, ]
+test  <- df[-trainIndex, ]
+
+```
+
+The dataset was divided into training (70%) and testing (30%) subsets using stratified sampling. The training set was used to build predictive models, while the test set was used to evaluate model performance on unseen data.
+
+```{r}
+train_clean <- train %>% dplyr::select(-price_total)
+test_clean  <- test  %>% dplyr::select(-price_total)
+```
+
+#### PHASE 3: MULTIPLE LINEAR REGRESSION
+##### Y = $beta$0 + ...
+###### fit model
+```{r}
+lm_model <- lm(log_price ~ ., data = train)
+
+pred_lm <- predict(lm_model, newdata = test)
+```
+
+```{r}
+rmse <- function(actual, predicted) {
+  sqrt(mean((actual - predicted)^2))
+}
+
+mae <- function(actual, predicted) {
+  mean(abs(actual - predicted))
+}
+
+cat("Linear Regression:\n")
+cat("RMSE:", rmse(test$log_price, pred_lm), "\n")
+cat("MAE:", mae(test$log_price, pred_lm), "\n")
+```
+#### Residual Plot
+```{r}
+plot(lm_model$fitted.values, lm_model$residuals)
+abline(h = 0, col = "red")
+```
+#### Cook’s Distance
+```{r}
+cooksd <- cooks.distance(lm_model)
+plot(cooksd, type="h")
+```
+#### Stepwise Selection
+```{r}
+step_model <- stepAIC(lm_model, direction = "both")
+
+summary(step_model)
+```
+```{r}
+#model comparison
+AIC(lm_model, step_model)
+BIC(lm_model, step_model)
+```
+### Regularisation
+```{r}
+x_train <- model.matrix(log_price ~ . - price_total, train)[,-1]
+
+y_train <- train$log_price
+
+x_test <- model.matrix(log_price ~ . - price_total, test)[,-1]
+y_test <- test$log_price
+
+```
+
+#Ridge Regression
+```{r}
+ridge_model <- cv.glmnet(x_train, y_train, alpha = 0)
+
+ridge_pred <- predict(ridge_model, s = "lambda.min", newx = x_test)
+
+cat("Ridge RMSE:", rmse(y_test, ridge_pred), "\n")
+```
+#Lasso
+```{r}
+lasso_model <- cv.glmnet(x_train, y_train, alpha = 1)
+
+lasso_pred <- predict(lasso_model, s = "lambda.min", newx = x_test)
+
+cat("LASSO RMSE:", rmse(y_test, lasso_pred), "\n")
+```
+#Elastic Net
+```{r}
+elastic_model <- cv.glmnet(x_train, y_train, alpha = 0.5)
+
+elastic_pred <- predict(elastic_model, s = "lambda.min", newx = x_test)
+
+cat("Elastic Net RMSE:", rmse(y_test, elastic_pred), "\n")
+```
+### PHASE 7: KNN REGRESSION
+#Normalize Data
+```{r}
+preProc <- preProcess(train[, -c(which(names(train) %in% c("price","log_price")))], method = c("center", "scale"))
+
+train_scaled <- predict(preProc, train)
+test_scaled  <- predict(preProc, test)
+```
+#Apply KNN
+```{r}
+knn_model <- knnreg(log_price ~ . - price_total, data = train_scaled, k = 5)
+
+knn_pred <- predict(knn_model, newdata = test_scaled)
+
+cat("KNN RMSE:", rmse(test$log_price, knn_pred), "\n")
+```
+### PHASE 8: GLM (UNIT 5)
+```{r}
+#Fit GLM
+glm_model <- glm(log_price ~ . - price_total, data = train, family = gaussian(link = "identity"))
+
+summary(glm_model)
+```
+#Model Comparison
+```{r}
+results <- data.frame(
+  Model = c("Linear", "Stepwise", "Ridge", "LASSO", "Elastic", "KNN"),
+  RMSE = c(
+    rmse(test$log_price, pred_lm),
+    rmse(test$log_price, predict(step_model, test)),
+    rmse(y_test, ridge_pred),
+    rmse(y_test, lasso_pred),
+    rmse(y_test, elastic_pred),
+    rmse(test$log_price, knn_pred)
+  )
+)
+
+print(results[order(results$RMSE), ])
+```
+```{r}
+#final model
+
+best_model <- step_model  # or whichever has lowest RMSE
+
+final_pred <- predict(best_model, newdata = test)
+```
+
